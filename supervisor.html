@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Supervisor - Download de Checklists</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background-color: #fff8e1;
+    margin: 0; padding: 20px;
+  }
+  header {
+    background: linear-gradient(90deg, #f57c00, #ffca28);
+    color: white;
+    padding: 15px;
+    text-align: center;
+    font-size: 1.8em;
+    font-weight: bold;
+    margin-bottom: 20px;
+  }
+  section {
+    max-width: 900px;
+    margin: 0 auto 40px auto;
+    background: #fff3e0;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  }
+  h2 {
+    color: #f57c00;
+    margin-top: 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+  }
+  th, td {
+    border: 1px solid #f57c00;
+    padding: 8px;
+    text-align: left;
+    font-size: 0.9em;
+  }
+  th {
+    background-color: #f57c00;
+    color: white;
+  }
+  button {
+    background-color: #f57c00;
+    border: none;
+    color: white;
+    font-weight: bold;
+    border-radius: 6px;
+    cursor: pointer;
+    padding: 10px 20px;
+    font-size: 1em;
+    margin-top: 15px;
+    transition: background-color 0.3s ease;
+  }
+  button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+  }
+  button:hover:not(:disabled) {
+    background-color: #ef6c00;
+  }
+  #assinaturaContainer {
+    margin-top: 20px;
+    text-align: center;
+  }
+  #assinaturaCanvas {
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background-color: white;
+    touch-action: none;
+  }
+  #btnLimparAssinatura {
+    margin-top: 8px;
+    background-color: #d84315;
+  }
+  #btnLimparAssinatura:hover {
+    background-color: #bf360c;
+  }
+  .message {
+    text-align: center;
+    font-weight: 600;
+    margin-top: 10px;
+    color: #1b5e20;
+  }
+  .actions {
+    text-align: center;
+    margin-top: 20px;
+  }
+  #btnLogout {
+    background-color: #ff6f00;
+    padding: 10px 20px;
+    font-weight: bold;
+    border-radius: 6px;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  #btnLogout:hover {
+    background-color: #e65c00;
+  }
+</style>
+</head>
+<body>
+
+<header>FALBOM NUTRIÇÃO ANIMAL - Supervisor</header>
+
+<section>
+  <h2>Checklists Salvos</h2>
+  <table id="checklistsTable">
+    <thead>
+      <tr>
+        <th><input type="checkbox" id="selectAll" title="Selecionar Todos" /></th>
+        <th>Usuário</th>
+        <th>Nível</th>
+        <th>Data/Hora Início</th>
+        <th>Data/Hora Fim</th>
+        <th>Data/Hora Envio</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div id="assinaturaContainer">
+    <label>Assinatura Digital (obrigatória para baixar)</label><br/>
+    <canvas id="assinaturaCanvas" width="400" height="150"></canvas><br/>
+    <button type="button" id="btnLimparAssinatura">Limpar Assinatura</button>
+  </div>
+
+  <button id="btnGerarExcel" disabled>Gerar e Baixar Excel dos Selecionados</button>
+
+  <div id="message" class="message" style="display:none;"></div>
+</section>
+
+<div class="actions">
+  <button id="btnLogout">Sair / Voltar ao Login</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
+
+<script>
+  const usuarioLogado = JSON.parse(localStorage.getItem('usuarioLogado'));
+  if(!usuarioLogado || usuarioLogado.nivel !== 'Supervisor') {
+    alert('Acesso negado. Você deve estar logado como Supervisor para acessar esta página.');
+    window.location.href = 'index.html';
+  }
+
+  const checklistsTableBody = document.querySelector('#checklistsTable tbody');
+  const selectAllCheckbox = document.getElementById('selectAll');
+  const btnGerarExcel = document.getElementById('btnGerarExcel');
+  const messageDiv = document.getElementById('message');
+
+  const assinaturaCanvas = document.getElementById('assinaturaCanvas');
+  const ctx = assinaturaCanvas.getContext('2d');
+  const btnLimparAssinatura = document.getElementById('btnLimparAssinatura');
+  const btnLogout = document.getElementById('btnLogout');
+
+  let desenhando = false;
+  let ultimaPos = {x:0, y:0};
+
+  function formatarDataISO(isoStr) {
+    if(!isoStr) return '';
+    const d = new Date(isoStr);
+    return d.toLocaleString('pt-BR', {dateStyle:'short', timeStyle:'short'});
+  }
+
+  function carregarChecklists() {
+    checklistsTableBody.innerHTML = '';
+    const checklists = JSON.parse(localStorage.getItem('checklistsSalvos')) || [];
+    if(checklists.length === 0) {
+      checklistsTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Nenhum checklist salvo.</td></tr>';
+      return;
+    }
+
+    checklists.forEach((cl, idx) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="checkbox" class="chkItem" data-index="${idx}" /></td>
+        <td>${cl.usuario}</td>
+        <td>${cl.nivelUsuario}</td>
+        <td>${formatarDataISO(cl.dtInicio)}</td>
+        <td>${formatarDataISO(cl.dtFim)}</td>
+        <td>${formatarDataISO(cl.dtEnvio)}</td>
+      `;
+      checklistsTableBody.appendChild(tr);
+    });
+  }
+
+  function iniciarDesenho(e) {
+    desenhando = true;
+    const rect = assinaturaCanvas.getBoundingClientRect();
+    ultimaPos = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    };
+  }
+
+  function desenhar(e) {
+    if (!desenhando) return;
+    const rect = assinaturaCanvas.getBoundingClientRect();
+    const posAtual = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    };
+    ctx.beginPath();
+    ctx.moveTo(ultimaPos.x, ultimaPos.y);
+    ctx.lineTo(posAtual.x, posAtual.y);
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#000';
+    ctx.stroke();
+    ctx.closePath();
+    ultimaPos = posAtual;
+    verificarAssinatura();
+  }
+
+  function pararDesenho() {
+    desenhando = false;
+  }
+
+  assinaturaCanvas.addEventListener('mousedown', iniciarDesenho);
+  assinaturaCanvas.addEventListener('mousemove', desenhar);
+  document.addEventListener('mouseup', pararDesenho);
+
+  assinaturaCanvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    iniciarDesenho(touch);
+  });
+  assinaturaCanvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    desenhar(touch);
+  });
+  assinaturaCanvas.addEventListener('touchend', e => {
+    e.preventDefault();
+    pararDesenho();
+  });
+
+  btnLimparAssinatura.addEventListener('click', () => {
+    ctx.clearRect(0, 0, assinaturaCanvas.width, assinaturaCanvas.height);
+    verificarAssinatura();
+  });
+
+  function verificarAssinatura() {
+    const imgData = ctx.getImageData(0, 0, assinaturaCanvas.width, assinaturaCanvas.height);
+    const temDesenho = imgData.data.some(channel => channel !== 0);
+    const algumSelecionado = [...document.querySelectorAll('.chkItem')].some(chk => chk.checked);
+    btnGerarExcel.disabled = !(temDesenho && algumSelecionado);
+  }
+
+  checklistsTableBody.addEventListener('change', e => {
+    if(e.target.classList.contains('chkItem')) {
+      verificarAssinatura();
+    }
+  });
+
+  selectAllCheckbox.addEventListener('change', () => {
+    const checkboxes = document.querySelectorAll('.chkItem');
+    checkboxes.forEach(chk => chk.checked = selectAllCheckbox.checked);
+    verificarAssinatura();
+  });
+
+  btnGerarExcel.addEventListener('click', async () => {
+    const checklists = JSON.parse(localStorage.getItem('checklistsSalvos')) || [];
+    const selecionados = [...document.querySelectorAll('.chkItem:checked')].map(chk => parseInt(chk.dataset.index));
+
+    if(selecionados.length === 0) {
+      alert('Selecione pelo menos um checklist.');
+      return;
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Checklists');
+
+    const agora = new Date();
+    const dataDownload = agora.toLocaleDateString('pt-BR');
+    const horaDownload = agora.toLocaleTimeString('pt-BR');
+
+    function base64ToUint8Array(base64) {
+      const raw = atob(base64);
+      const uint8Array = new Uint8Array(raw.length);
+      for(let i=0; i<raw.length; i++) {
+        uint8Array[i] = raw.charCodeAt(i);
+      }
+      return uint8Array;
+    }
+
+    if(selecionados.length === 1) {
+      // Baixar checklist completo
+      const cl = checklists[selecionados[0]];
+      const camposFixos = ['usuario','nivelUsuario','dtInicio','dtFim','dtEnvio','nomeChecklist','assinatura'];
+      const campos = Object.keys(cl).filter(k => !camposFixos.includes(k));
+      const cabecalho = ['Usuário','Nível','Data/Hora Início','Data/Hora Fim','Data/Hora Envio', ...campos];
+      worksheet.addRow(cabecalho);
+
+      const linha = [
+        cl.usuario,
+        cl.nivelUsuario,
+        cl.dtInicio,
+        cl.dtFim,
+        cl.dtEnvio,
+        ...campos.map(c => cl[c] || '')
+      ];
+      worksheet.addRow(linha);
+
+      worksheet.columns.forEach(col => col.width = 20);
+
+      if(cl.assinatura) {
+        const base64Data = cl.assinatura.replace(/^data:image\/png;base64,/, '');
+        const uint8Array = base64ToUint8Array(base64Data);
+        const imageId = workbook.addImage({
+          buffer: uint8Array,
+          extension: 'png',
+        });
+        worksheet.addImage(imageId, {
+          tl: { col: 0, row: 2 },
+          ext: { width: 300, height: 100 }
+        });
+      }
+    } else {
+      // Mais de um checklist: médias de cada e média geral
+      const camposNumericos = Object.keys(checklists[0]).filter(k => {
+        if(['usuario','nivelUsuario','dtInicio','dtFim','dtEnvio','nomeChecklist','assinatura'].includes(k)) return false;
+        return !isNaN(parseFloat(checklists[0][k]));
+      });
+
+      const cabecalho = ['Usuário', 'Nível', 'Data/Hora Início', 'Data/Hora Fim', 'Data/Hora Envio', ...camposNumericos];
+      worksheet.addRow(cabecalho);
+
+      const mediasIndividuais = [];
+
+      selecionados.forEach(idx => {
+        const cl = checklists[idx];
+        const linha = [
+          cl.usuario,
+          cl.nivelUsuario,
+          cl.dtInicio,
+          cl.dtFim,
+          cl.dtEnvio
+        ];
+        const medias = {};
+        camposNumericos.forEach(campo => {
+          const val = parseFloat(cl[campo]);
+          medias[campo] = isNaN(val) ? null : val;
+          linha.push(isNaN(val) ? '' : val);
+        });
+        mediasIndividuais.push(medias);
+        worksheet.addRow(linha);
+      });
+
+      // Média geral das médias
+      const mediaGeral = {};
+      camposNumericos.forEach(campo => {
+        let soma = 0;
+        let count = 0;
+        mediasIndividuais.forEach(medias => {
+          if(medias[campo] !== null) {
+            soma += medias[campo];
+            count++;
+          }
+        });
+        mediaGeral[campo] = count > 0 ? soma / count : null;
+      });
+
+      const linhaMediaGeral = ['Média Geral', '', '', '', ''];
+      camposNumericos.forEach(campo => {
+        linhaMediaGeral.push(mediaGeral[campo] !== null ? mediaGeral[campo].toFixed(3) : '');
+      });
+      worksheet.addRow(linhaMediaGeral);
+
+      worksheet.columns.forEach(col => col.width = 20);
+    }
+
+    // Assinatura supervisor embutida
+    const dataUrl = assinaturaCanvas.toDataURL('image/png');
+    const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
+    const uint8Array = base64ToUint8Array(base64Data);
+    const imageId = workbook.addImage({
+      buffer: uint8Array,
+      extension: 'png',
+    });
+
+    const lastRowNumber = worksheet.lastRow.number + 1;
+    worksheet.addImage(imageId, {
+      tl: { col: 0, row: lastRowNumber - 1 },
+      ext: { width: 300, height: 100 }
+    });
+
+    // Informações supervisor e data/hora download na primeira linha
+    worksheet.getCell('A1').value = `Supervisor: ${usuarioLogado.username}`;
+    worksheet.getCell('B1').value = `Data download: ${dataDownload}`;
+    worksheet.getCell('C1').value = `Hora download: ${horaDownload}`;
+
+    // Gerar e baixar Excel
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `checklists_${usuarioLogado.username}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    messageDiv.textContent = 'Arquivo gerado e baixado com sucesso!';
+    messageDiv.className = 'message success';
+    messageDiv.style.display = 'block';
+
+    setTimeout(() => {
+      ctx.clearRect(0, 0, assinaturaCanvas.width, assinaturaCanvas.height);
+      document.querySelectorAll('.chkItem').forEach(chk => chk.checked = false);
+      selectAllCheckbox.checked = false;
+      btnGerarExcel.disabled = true;
+      messageDiv.style.display = 'none';
+    }, 3000);
+  });
+
+  btnLogout.addEventListener('click', () => {
+    localStorage.removeItem('usuarioLogado');
+    window.location.href = 'index.html';
+  });
+
+  carregarChecklists();
+</script>
+
+</body>
+</html>
