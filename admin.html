@@ -107,11 +107,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
 
-<!-- SheetJS para Excel -->
-<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 </head>
 <body>
 
@@ -170,7 +165,6 @@
 
   <button id="salvarChecklistBtn" style="margin-top: 10px;">Salvar Alterações</button>
   <button id="gerarExcelBtn" style="margin-top: 10px;">Gerar e Baixar Excel</button>
-  <button id="downloadChecklistBrancoBtn" style="margin-top: 10px;">Download Checklist em Branco (PDF)</button>
 </section>
 
 <section>
@@ -190,6 +184,8 @@
   <button id="logoutBtn">Sair / Voltar ao Login</button>
 </div>
 
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   const usuarioLogado = JSON.parse(localStorage.getItem('usuarioLogado'));
   if(!usuarioLogado || usuarioLogado.nivel !== 'Administrador') {
@@ -207,7 +203,6 @@
   const addCampoBtn = document.getElementById('addCampoBtn');
   const salvarChecklistBtn = document.getElementById('salvarChecklistBtn');
   const gerarExcelBtn = document.getElementById('gerarExcelBtn');
-  const downloadChecklistBrancoBtn = document.getElementById('downloadChecklistBrancoBtn');
   const logoutBtn = document.getElementById('logoutBtn');
   const filtroUsuarios = document.getElementById('filtroUsuarios');
   const filtroChecklists = document.getElementById('filtroChecklists');
@@ -238,30 +233,15 @@
     'Densidade (g/L)'
   ];
 
-  // Funções auxiliares para formatar datas
-  function formatarDataISO(isoStr) {
-    if(!isoStr) return '';
-    const d = new Date(isoStr);
-    return d.toLocaleDateString('pt-BR');
-  }
-  function formatarDataHoraISO(isoStr) {
-    if(!isoStr) return '';
-    const d = new Date(isoStr);
-    return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR');
-  }
+  let checklistEditandoIndex = null;
+  let checklistEditandoDados = null;
+  let graficoChecklists = null;
 
-  // Função para registrar logs
-  function registrarLog(mensagem) {
-    const logs = JSON.parse(localStorage.getItem('logsAuditoria')) || [];
-    logs.push({mensagem, usuario: usuarioLogado.username, data: new Date().toISOString()});
-    localStorage.setItem('logsAuditoria', JSON.stringify(logs));
-  }
-
-  // Função para registrar download
-  function registrarDownload(usuario) {
-    const logsDownload = JSON.parse(localStorage.getItem('logsDownload')) || [];
-    logsDownload.push({ usuario, data: new Date().toISOString() });
-    localStorage.setItem('logsDownload', JSON.stringify(logsDownload));
+  function campoParaKey(campo) {
+    return campo
+      .toLowerCase()
+      .replace(/[^a-z0-9]+(.)/g, (m, chr) => chr.toUpperCase())
+      .replace(/[^a-zA-Z0-9]/g, '');
   }
 
   // --- Usuários ---
@@ -294,7 +274,6 @@
     usuariosMessage.style.display = temUsuarios ? 'none' : 'block';
     usuariosMessage.textContent = temUsuarios ? '' : 'Nenhum usuário cadastrado (exceto admin).';
 
-    // Eventos para salvar senha, excluir usuário e redefinir senha
     document.querySelectorAll('.salvarSenhaBtn').forEach(btn => {
       btn.addEventListener('click', () => {
         const username = btn.getAttribute('data-username');
@@ -350,76 +329,175 @@
 
   exportarUsuariosBtn.addEventListener('click', () => {
     const usuarios = [];
-    const usuarioSolicitante = usuarioLogado.username;
-    const hoje = new Date().toISOString().slice(0,10);
-
-    registrarDownload(usuarioSolicitante);
-
-    function getAcessosUsuario(username) {
-      const logsLogin = JSON.parse(localStorage.getItem('logsLogin')) || [];
-      return logsLogin.filter(log => log.usuario === username).map(log => log.data);
-    }
-
-    function getChecklistsUsuario(username) {
-      const checklists = JSON.parse(localStorage.getItem('checklistsSalvos')) || [];
-      return checklists.filter(cl => cl.usuario === username);
-    }
-
-    function getErrosUsuario(username) {
-      const logsErro = JSON.parse(localStorage.getItem('logsErro')) || [];
-      return logsErro.filter(log => log.usuario === username);
-    }
-
     for(let i=0; i<localStorage.length; i++) {
       const key = localStorage.key(i);
       if(key.startsWith('user_')) {
         const user = JSON.parse(localStorage.getItem(key));
         if(user.username === 'admin') continue;
-
-        const acessos = getAcessosUsuario(user.username);
-        const checklists = getChecklistsUsuario(user.username);
-        const erros = getErrosUsuario(user.username);
-
-        usuarios.push([
-          user.username,
-          user.nivel,
-          formatarDataISO(user.dataCriacao),
-          acessos.length,
-          acessos.map(a => formatarDataHoraISO(a)).join('; '),
-          checklists.length,
-          checklists.map(c => formatarDataHoraISO(c.dtEnvio)).join('; '),
-          erros.length > 0 ? erros.map(e => formatarDataHoraISO(e.data) + ': ' + e.mensagem).join('; ') : 'Nenhum'
-        ]);
+        usuarios.push([user.username, user.password, user.nivel]);
       }
     }
-
     if(usuarios.length === 0) {
       alert('Nenhum usuário para exportar.');
       return;
     }
-
-    const cabecalho = [
-      'Usuário',
-      'Nível',
-      'Data de Criação',
-      'Qtd. Acessos',
-      'Datas de Acesso',
-      'Qtd. Checklists',
-      'Datas Checklists',
-      'Erros / Instabilidades'
-    ];
-
-    const linhas = [cabecalho, ...usuarios];
-
+    const linhas = [['Usuário', 'Senha', 'Nível'], ...usuarios];
     const ws = XLSX.utils.aoa_to_sheet(linhas);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Usuários');
-
-    XLSX.writeFile(wb, `usuarios_exportados_${hoje}.xlsx`);
+    XLSX.writeFile(wb, 'usuarios_exportados.xlsx');
   });
 
-  // --- Editor de Checklist ---
+  // --- Checklists ---
 
+  function carregarChecklists(filtro = '') {
+    checklistsTableBody.innerHTML = '';
+    const checklists = JSON.parse(localStorage.getItem('checklistsSalvos')) || [];
+    const filtroLower = filtro.toLowerCase();
+    if(checklists.length === 0) {
+      checklistsMessage.style.display = 'block';
+      checklistsMessage.textContent = 'Nenhum checklist salvo.';
+      return;
+    }
+    checklistsMessage.style.display = 'none';
+
+    checklists.forEach((cl, idx) => {
+      const textoLinha = `${cl.usuario} ${cl.nivelUsuario} ${cl.dtInicio} ${cl.dtFim} ${cl.dtEnvio}`.toLowerCase();
+      if(!textoLinha.includes(filtroLower)) return;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${cl.usuario}</td>
+        <td>${cl.nivelUsuario}</td>
+        <td>${formatarDataISO(cl.dtInicio)}</td>
+        <td>${formatarDataISO(cl.dtFim)}</td>
+        <td>${formatarDataISO(cl.dtEnvio)}</td>
+        <td>
+          <button data-index="${idx}" class="downloadChecklistBtn">Download</button>
+          <button data-index="${idx}" class="excluirChecklistBtn" style="background:#d84315; margin-left:5px;">Excluir</button>
+        </td>
+      `;
+      checklistsTableBody.appendChild(tr);
+    });
+
+    document.querySelectorAll('.downloadChecklistBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.getAttribute('data-index'));
+        baixarChecklistIndividual(idx);
+      });
+    });
+
+    document.querySelectorAll('.excluirChecklistBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.getAttribute('data-index'));
+        if(confirm('Deseja realmente excluir este checklist?')) {
+          excluirChecklist(idx);
+        }
+      });
+    });
+  }
+
+  filtroChecklists.addEventListener('input', () => {
+    carregarChecklists(filtroChecklists.value);
+  });
+
+  function formatarDataISO(isoStr) {
+    if(!isoStr) return '';
+    const d = new Date(isoStr);
+    return d.toLocaleString('pt-BR', {dateStyle:'short', timeStyle:'short'});
+  }
+
+  function baixarChecklistIndividual(index) {
+    const checklists = JSON.parse(localStorage.getItem('checklistsSalvos')) || [];
+    if(index < 0 || index >= checklists.length) {
+      alert('Checklist inválido.');
+      return;
+    }
+    const cl = checklists[index];
+
+    const camposChecklistPadrao = [
+      'Hora',
+      'T Set Point (°C)',
+      'Temperatura 1° Efeito (°C)',
+      'Temperatura 2° Efeito (°C)',
+      'Vazão Real (L/h)',
+      'Vácuo (mmCA)',
+      'Pressão vapor (kgf/cm²)',
+      'Água termocompressor (°C)',
+      'Condutividade (μS/cm)',
+      'Torre de Resfriamento Entrada (°C)',
+      'Torre de Resfriamento Saida (°C)',
+      'Umidade',
+      'Matéria seca',
+      '%Brix',
+      'Quantidade de liquido de entrada (kg)',
+      'Quantidade de liquido de saida (kg)',
+      'Densidade (g/L)'
+    ];
+
+    const campoParaKey = {
+      'Hora': 'hora',
+      'T Set Point (°C)': 'tSetPoint',
+      'Temperatura 1° Efeito (°C)': 'temp1Efeito',
+      'Temperatura 2° Efeito (°C)': 'temp2Efeito',
+      'Vazão Real (L/h)': 'vazaoReal',
+      'Vácuo (mmCA)': 'vacu',
+      'Pressão vapor (kgf/cm²)': 'pressaoVapor',
+      'Água termocompressor (°C)': 'aguaTermocompressor',
+      'Condutividade (μS/cm)': 'condutividade',
+      'Torre de Resfriamento Entrada (°C)': 'torreEntrada',
+      'Torre de Resfriamento Saida (°C)': 'torreSaida',
+      'Umidade': 'umidade',
+      'Matéria seca': 'materiaSeca',
+      '%Brix': 'brix',
+      'Quantidade de liquido de entrada (kg)': 'qtdLiquidoEntrada',
+      'Quantidade de liquido de saida (kg)': 'qtdLiquidoSaida',
+      'Densidade (g/L)': 'densidade'
+    };
+
+    const cabecalho = [
+      'Data/Hora Início',
+      'Data/Hora Fim',
+      'Data/Hora Envio',
+      'Nível Usuário',
+      'Usuário'
+    ].concat(camposChecklistPadrao);
+    const linhasExcel = [cabecalho];
+
+    const linha = [
+      cl.dtInicio,
+      cl.dtFim,
+      cl.dtEnvio,
+      cl.nivelUsuario,
+      cl.usuario
+    ];
+    camposChecklistPadrao.forEach(campo => {
+      const key = campoParaKey[campo];
+      linha.push(cl[key] || '');
+    });
+    linhasExcel.push(linha);
+
+    const ws = XLSX.utils.aoa_to_sheet(linhasExcel);
+    ws['!cols'] = Array(cabecalho.length).fill({wch: 20});
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Checklist');
+
+    const dataHoraAgora = new Date().toISOString().replace(/[:.]/g,'-');
+    const nomeArquivo = `checklist_${cl.usuario}_${dataHoraAgora}.xlsx`;
+
+    XLSX.writeFile(wb, nomeArquivo);
+  }
+
+  function excluirChecklist(index) {
+    let checklists = JSON.parse(localStorage.getItem('checklistsSalvos')) || [];
+    if(index < 0 || index >= checklists.length) return;
+    checklists.splice(index, 1);
+    localStorage.setItem('checklistsSalvos', JSON.stringify(checklists));
+    carregarChecklists(filtroChecklists.value);
+    registrarLog(`Checklist excluído.`);
+  }
+
+  // Editor de checklist
   function atualizarListaCampos() {
     fieldList.innerHTML = '';
     camposChecklist.forEach((campo, i) => {
@@ -542,61 +620,65 @@
     alert('Arquivo Excel gerado e baixado com sucesso!');
   });
 
-  // --- Download Checklist em Branco (PDF) ---
+  // Logs de auditoria
+  function registrarLog(mensagem) {
+    const logs = JSON.parse(localStorage.getItem('logsAuditoria')) || [];
+    logs.push({mensagem, usuario: usuarioLogado.username, data: new Date().toISOString()});
+    localStorage.setItem('logsAuditoria', JSON.stringify(logs));
+  }
 
-  downloadChecklistBrancoBtn.addEventListener('click', () => {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const marginLeft = 14;
-    let y = 20;
-
-    // Cabeçalho
-    doc.setFontSize(16);
-    doc.setTextColor(245, 124, 0);
-    doc.text('FALBOM NUTRIÇÃO ANIMAL', pageWidth / 2, y, { align: 'center' });
-    y += 12;
-
-    // Título do checklist
-    const nomeChecklist = nomeChecklistInput.value.trim() || 'Check List Operacional';
-    doc.setFontSize(14);
-    doc.setTextColor(0, 0, 0);
-    doc.text(nomeChecklist, pageWidth / 2, y, { align: 'center' });
-    y += 15;
-
-    // Informação para preenchimento manual
-    doc.setFontSize(11);
-    doc.text('Preencha os campos abaixo manualmente:', marginLeft, y);
-    y += 10;
-
-    // Desenhar linhas para preenchimento
-    const lineHeight = 8;
-    const lineWidth = pageWidth - marginLeft * 2;
-
-    camposChecklist.forEach(campo => {
-      if(y + lineHeight > doc.internal.pageSize.getHeight() - 20) {
-        doc.addPage();
-        y = 20;
-        // Reescreve cabeçalho em nova página
-        doc.setFontSize(16);
-        doc.setTextColor(245, 124, 0);
-        doc.text('FALBOM NUTRIÇÃO ANIMAL', pageWidth / 2, y, { align: 'center' });
-        y += 15;
+  // Backup e restauração
+  backupBtn.addEventListener('click', () => {
+    const backupData = {
+      usuarios: [],
+      checklists: JSON.parse(localStorage.getItem('checklistsSalvos')) || [],
+      logs: JSON.parse(localStorage.getItem('logsAuditoria')) || []
+    };
+    for(let i=0; i<localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if(key.startsWith('user_')) {
+        backupData.usuarios.push({key, value: JSON.parse(localStorage.getItem(key))});
       }
-      doc.setFontSize(12);
-      doc.setTextColor(0, 0, 0);
-      doc.text(campo, marginLeft, y);
-      y += 3;
-      doc.line(marginLeft, y, marginLeft + lineWidth, y); // linha para preenchimento
-      y += lineHeight;
-    });
-
-    doc.save(`checklist_em_branco_${new Date().toISOString().slice(0,10)}.pdf`);
+    }
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'backup_falbom.json';
+    a.click();
+    URL.revokeObjectURL(url);
   });
 
-  // --- Dashboard ---
+  restoreBtn.addEventListener('click', () => {
+    if(restoreInput.files.length === 0) {
+      alert('Selecione um arquivo JSON para restaurar.');
+      return;
+    }
+    const file = restoreInput.files[0];
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if(!data.usuarios || !data.checklists || !data.logs) {
+          alert('Arquivo inválido.');
+          return;
+        }
+        data.usuarios.forEach(u => {
+          localStorage.setItem(u.key, JSON.stringify(u.value));
+        });
+        localStorage.setItem('checklistsSalvos', JSON.stringify(data.checklists));
+        localStorage.setItem('logsAuditoria', JSON.stringify(data.logs));
+        alert('Backup restaurado com sucesso!');
+        carregarUsuarios(filtroUsuarios.value);
+        carregarChecklists(filtroChecklists.value);
+      } catch(err) {
+        alert('Erro ao ler arquivo: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  });
 
+  // Dashboard com Chart.js
   function gerarDashboard() {
     const checklists = JSON.parse(localStorage.getItem('checklistsSalvos')) || [];
     const contagemPorUsuario = {};
@@ -635,8 +717,7 @@
     window.location.href = 'index.html';
   });
 
-  // --- Relatório PDF ---
-
+  // Função para gerar relatório completo em PDF
   btnGerarRelatorio.addEventListener('click', () => {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
@@ -645,27 +726,14 @@
     const hoje = new Date();
     const dataFormatada = hoje.toISOString().slice(0,10);
 
-    const pageWidth = doc.internal.pageSize.getWidth();
-
-    // Cabeçalho fixo em todas as páginas
-    doc.setFontSize(16);
-    doc.setTextColor(245, 124, 0);
-    doc.text('FALBOM NUTRIÇÃO ANIMAL', pageWidth / 2, 15, { align: 'center' });
-
-    // Ajusta o início do conteúdo para não sobrepor o cabeçalho
-    let y = 30;
-
     doc.setFontSize(18);
-    doc.setTextColor(0, 0, 0);
-    doc.text('Relatório Completo do Sistema', 14, y);
-    y += 8;
+    doc.text('Relatório Completo do Sistema', 14, 20);
     doc.setFontSize(11);
-    doc.text(`Usuário: ${usuario}`, 14, y);
-    y += 6;
-    doc.text(`Data de geração: ${dataFormatada}`, 14, y);
-    y += 6;
-    doc.text('Período: Últimos 30 dias', 14, y);
-    y += 10;
+    doc.text(`Usuário: ${usuario}`, 14, 28);
+    doc.text(`Data de geração: ${dataFormatada}`, 14, 34);
+    doc.text('Período: Últimos 30 dias', 14, 40);
+
+    let y = 50;
 
     function filtrarLogsUltimos30Dias(logs) {
       const trintaDiasAtras = new Date();
@@ -700,11 +768,6 @@
           0: { cellWidth: 40 },
           1: { cellWidth: 30 },
           2: { cellWidth: 110 }
-        },
-        didDrawPage: (data) => {
-          doc.setFontSize(16);
-          doc.setTextColor(245, 124, 0);
-          doc.text('FALBOM NUTRIÇÃO ANIMAL', pageWidth / 2, 15, { align: 'center' });
         }
       });
       y = doc.lastAutoTable.finalY + 10;
@@ -739,11 +802,6 @@
           0: { cellWidth: 40 },
           1: { cellWidth: 30 },
           2: { cellWidth: 110 }
-        },
-        didDrawPage: (data) => {
-          doc.setFontSize(16);
-          doc.setTextColor(245, 124, 0);
-          doc.text('FALBOM NUTRIÇÃO ANIMAL', pageWidth / 2, 15, { align: 'center' });
         }
       });
       y = doc.lastAutoTable.finalY + 10;
@@ -782,11 +840,6 @@
         columnStyles: {
           0: { cellWidth: 80 },
           1: { cellWidth: 40 }
-        },
-        didDrawPage: (data) => {
-          doc.setFontSize(16);
-          doc.setTextColor(245, 124, 0);
-          doc.text('FALBOM NUTRIÇÃO ANIMAL', pageWidth / 2, 15, { align: 'center' });
         }
       });
     }
