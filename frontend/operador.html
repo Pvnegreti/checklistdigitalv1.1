@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Check List Operacional - Operador</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background-color: #fff8e1;
+    margin: 0; padding: 20px;
+  }
+  header {
+    background: linear-gradient(90deg, #f57c00, #ffca28);
+    color: white;
+    padding: 15px;
+    text-align: center;
+    font-size: 1.8em;
+    font-weight: bold;
+    margin-bottom: 20px;
+  }
+  .checklist-container {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .checklist {
+    border: 1px solid #f57c00;
+    border-radius: 6px;
+    margin-bottom: 15px;
+    background: #fff3e0;
+  }
+  .checklist-header {
+    background-color: #f57c00;
+    color: white;
+    padding: 10px;
+    cursor: pointer;
+    user-select: none;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .checklist-header span {
+    font-size: 1.1em;
+  }
+  .toggle-icon {
+    font-weight: bold;
+    font-size: 1.3em;
+  }
+  .checklist-body {
+    padding: 15px;
+    display: none;
+  }
+  .checklist-body.active {
+    display: block;
+  }
+  label {
+    display: block;
+    margin-top: 8px;
+    font-weight: 600;
+  }
+  input[type="text"],
+  input[type="number"],
+  input[type="time"] {
+    width: 100%;
+    padding: 7px;
+    margin-top: 4px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+  }
+  button {
+    background-color: #f57c00;
+    border: none;
+    color: white;
+    padding: 12px 20px;
+    margin-top: 20px;
+    font-weight: bold;
+    font-size: 1em;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+  }
+  button:hover:not(:disabled) {
+    background-color: #ef6c00;
+  }
+  .actions {
+    text-align: center;
+    margin-top: 30px;
+  }
+  .message {
+    max-width: 900px;
+    margin: 10px auto;
+    padding: 10px;
+    border-radius: 6px;
+    font-weight: 600;
+    text-align: center;
+  }
+  .message.success {
+    background-color: #c8e6c9;
+    color: #1b5e20;
+  }
+  .message.error {
+    background-color: #ffcdd2;
+    color: #b71c1c;
+  }
+  #assinaturaContainer {
+    margin-top: 20px;
+    text-align: center;
+  }
+  #assinaturaCanvas {
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background-color: white;
+    touch-action: none;
+  }
+  #btnLimparAssinatura {
+    margin-top: 8px;
+    background-color: #d84315;
+  }
+  #btnLimparAssinatura:hover {
+    background-color: #bf360c;
+  }
+</style>
+</head>
+<body>
+
+<header>FALBOM NUTRIÇÃO ANIMAL - Check List Operacional</header>
+
+<div class="checklist-container" id="checklistContainer">
+  <!-- Checklists serão inseridos aqui via JS -->
+</div>
+
+<div id="assinaturaContainer">
+  <label>Assinatura Digital (obrigatória para salvar)</label><br/>
+  <canvas id="assinaturaCanvas" width="400" height="150"></canvas><br/>
+  <button type="button" id="btnLimparAssinatura">Limpar Assinatura</button>
+</div>
+
+<div class="actions">
+  <button id="saveBtn" disabled>Salvar e Baixar Excel</button>
+  <button id="logoutBtn" style="background:#ff6f00; margin-left: 15px;">Sair / Voltar ao Login</button>
+</div>
+
+<div id="message" class="message" style="display:none;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
+
+<script>
+  const usuarioLogado = JSON.parse(localStorage.getItem('usuarioLogado'));
+  if(!usuarioLogado || usuarioLogado.nivel !== 'Operador') {
+    alert('Acesso negado. Você deve estar logado como Operador para acessar esta página.');
+    window.location.href = 'index.html';
+  }
+
+  const checklistContainer = document.getElementById('checklistContainer');
+  const saveBtn = document.getElementById('saveBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const messageDiv = document.getElementById('message');
+
+  const camposChecklist = [
+    {label: 'Hora', type: 'time', key: 'hora'},
+    {label: 'T Set Point (°C)', type: 'number', key: 'tSetPoint', step: '0.1'},
+    {label: 'Temperatura 1° Efeito (°C)', type: 'number', key: 'temp1Efeito', step: '0.1'},
+    {label: 'Temperatura 2° Efeito (°C)', type: 'number', key: 'temp2Efeito', step: '0.1'},
+    {label: 'Vazão Real (L/h)', type: 'number', key: 'vazaoReal', step: '0.1'},
+    {label: 'Vácuo (mmCA)', type: 'number', key: 'vacu', step: '0.1'},
+    {label: 'Pressão vapor (kgf/cm²)', type: 'number', key: 'pressaoVapor', step: '0.01'},
+    {label: 'Água termocompressor (°C)', type: 'number', key: 'aguaTermocompressor', step: '0.1'},
+    {label: 'Condutividade (μS/cm)', type: 'number', key: 'condutividade', step: '1'},
+    {label: 'Torre de Resfriamento Entrada (°C)', type: 'number', key: 'torreEntrada', step: '0.1'},
+    {label: 'Torre de Resfriamento Saida (°C)', type: 'number', key: 'torreSaida', step: '0.1'},
+    {label: 'Umidade', type: 'number', key: 'umidade', step: '0.1'},
+    {label: 'Matéria seca', type: 'number', key: 'materiaSeca', step: '0.1'},
+    {label: '%Brix', type: 'number', key: 'brix', step: '0.1'},
+    {label: 'Quantidade de liquido de entrada (kg)', type: 'number', key: 'qtdLiquidoEntrada', step: '0.1'},
+    {label: 'Quantidade de liquido de saida (kg)', type: 'number', key: 'qtdLiquidoSaida', step: '0.1'},
+    {label: 'Densidade (g/L)', type: 'number', key: 'densidade', step: '0.001'}
+  ];
+
+  // Cria 12 checklists no DOM
+  for(let i=1; i<=12; i++) {
+    const checklist = document.createElement('div');
+    checklist.classList.add('checklist');
+
+    const header = document.createElement('div');
+    header.classList.add('checklist-header');
+    header.innerHTML = `<span>Check List ${i}</span><span class="toggle-icon">+</span>`;
+    checklist.appendChild(header);
+
+    const body = document.createElement('div');
+    body.classList.add('checklist-body');
+
+    camposChecklist.forEach(campo => {
+      const label = document.createElement('label');
+      label.textContent = campo.label;
+      const input = document.createElement('input');
+      input.type = campo.type;
+      input.name = `checklist${i}_${campo.key}`;
+      if(campo.step) input.step = campo.step;
+      input.required = false;
+      body.appendChild(label);
+      body.appendChild(input);
+    });
+
+    checklist.appendChild(body);
+    checklistContainer.appendChild(checklist);
+
+    header.addEventListener('click', () => {
+      const isActive = body.classList.toggle('active');
+      header.querySelector('.toggle-icon').textContent = isActive ? '−' : '+';
+    });
+  }
+
+  function showMessage(msg, type='success') {
+    messageDiv.textContent = msg;
+    messageDiv.className = 'message ' + type;
+    messageDiv.style.display = 'block';
+    setTimeout(() => {
+      messageDiv.style.display = 'none';
+    }, 4000);
+  }
+
+  function calcularMedias(dados) {
+    const soma = {};
+    const contagem = {};
+    camposChecklist.forEach(campo => {
+      soma[campo.key] = 0;
+      contagem[campo.key] = 0;
+    });
+
+    dados.forEach(item => {
+      camposChecklist.forEach(campo => {
+        const val = parseFloat(item[campo.key]);
+        if(!isNaN(val)) {
+          soma[campo.key] += val;
+          contagem[campo.key]++;
+        }
+      });
+    });
+
+    const medias = {};
+    camposChecklist.forEach(campo => {
+      medias[campo.key] = contagem[campo.key] > 0 ? (soma[campo.key]/contagem[campo.key]) : null;
+    });
+    return medias;
+  }
+
+  // Assinatura digital no canvas
+  const canvas = document.getElementById('assinaturaCanvas');
+  const ctx = canvas.getContext('2d');
+
+  let desenhando = false;
+  let ultimaPos = {x:0, y:0};
+
+  function iniciarDesenho(e) {
+    desenhando = true;
+    const rect = canvas.getBoundingClientRect();
+    ultimaPos = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    };
+  }
+
+  function desenhar(e) {
+    if (!desenhando) return;
+    const rect = canvas.getBoundingClientRect();
+    const posAtual = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    };
+    ctx.beginPath();
+    ctx.moveTo(ultimaPos.x, ultimaPos.y);
+    ctx.lineTo(posAtual.x, posAtual.y);
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#000';
+    ctx.stroke();
+    ctx.closePath();
+    ultimaPos = posAtual;
+    verificarAssinatura();
+  }
+
+  function pararDesenho() {
+    desenhando = false;
+  }
+
+  canvas.addEventListener('mousedown', iniciarDesenho);
+  canvas.addEventListener('mousemove', desenhar);
+  document.addEventListener('mouseup', pararDesenho);
+
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    iniciarDesenho(touch);
+  });
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    desenhar(touch);
+  });
+  canvas.addEventListener('touchend', e => {
+    e.preventDefault();
+    pararDesenho();
+  });
+
+  document.getElementById('btnLimparAssinatura').addEventListener('click', () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    verificarAssinatura();
+  });
+
+  // Habilita ou desabilita o botão salvar dependendo da assinatura
+  function verificarAssinatura() {
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const temDesenho = imgData.data.some(channel => channel !== 0);
+    saveBtn.disabled = !temDesenho;
+  }
+
+  // Inicialmente botão desabilitado
+  saveBtn.disabled = true;
+
+  saveBtn.addEventListener('click', async () => {
+    const dados = [];
+    let preenchidos = 0;
+    const dataHoraEnvio = new Date();
+
+    for(let i=1; i<=12; i++) {
+      let preenchido = false;
+      const checklistData = {};
+
+      camposChecklist.forEach(campo => {
+        const val = document.querySelector(`input[name=checklist${i}_${campo.key}]`).value;
+        checklistData[campo.key] = val || '';
+        if(val && val.trim() !== '') preenchido = true;
+      });
+
+      if(!preenchido) continue;
+
+      preenchidos++;
+
+      checklistData.dtInicio = dataHoraEnvio.toISOString();
+      checklistData.dtFim = dataHoraEnvio.toISOString();
+      checklistData.dtEnvio = dataHoraEnvio.toISOString();
+      checklistData.nivelUsuario = usuarioLogado.nivel;
+      checklistData.usuario = usuarioLogado.username;
+
+      dados.push(checklistData);
+    }
+
+    if(preenchidos === 0) {
+      showMessage('Preencha pelo menos um checklist.', 'error');
+      return;
+    }
+
+    // Salvar no localStorage para supervisor
+    let todosChecklists = JSON.parse(localStorage.getItem('checklistsSalvos')) || [];
+    todosChecklists = todosChecklists.concat(dados);
+    localStorage.setItem('checklistsSalvos', JSON.stringify(todosChecklists));
+
+    const medias = calcularMedias(dados);
+
+    // Gerar Excel com assinatura embutida usando ExcelJS
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Checklists');
+
+    // Cabeçalho
+    const cabecalho = [
+      'Data/Hora Início',
+      'Data/Hora Fim',
+      'Data/Hora Envio',
+      'Nível Usuário',
+      'Usuário',
+      ...camposChecklist.map(c => c.label)
+    ];
+    worksheet.addRow(cabecalho);
+
+    // Dados
+    dados.forEach(d => {
+      const linha = [
+        d.dtInicio,
+        d.dtFim,
+        d.dtEnvio,
+        d.nivelUsuario,
+        d.usuario,
+        ...camposChecklist.map(campo => d[campo.key] || '')
+      ];
+      worksheet.addRow(linha);
+    });
+
+    // Médias
+    const linhaMedia = [
+      'Média',
+      '',
+      '',
+      '',
+      '',
+      ...camposChecklist.map(campo => {
+        const m = medias[campo.key];
+        return m !== null ? m.toFixed(3) : '';
+      })
+    ];
+    worksheet.addRow(linhaMedia);
+
+    // Ajustar largura colunas
+    worksheet.columns.forEach(col => {
+      col.width = 20;
+    });
+
+    // Adicionar assinatura como imagem na linha abaixo da tabela
+    const dataUrl = canvas.toDataURL('image/png');
+    const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
+
+    function base64ToUint8Array(base64) {
+      const raw = atob(base64);
+      const uint8Array = new Uint8Array(raw.length);
+      for(let i=0; i<raw.length; i++) {
+        uint8Array[i] = raw.charCodeAt(i);
+      }
+      return uint8Array;
+    }
+
+    const imageId = workbook.addImage({
+      buffer: base64ToUint8Array(base64Data),
+      extension: 'png',
+    });
+
+    const lastRowNumber = worksheet.lastRow.number + 1;
+    worksheet.addImage(imageId, {
+      tl: { col: 0, row: lastRowNumber - 1 },
+      ext: { width: 300, height: 100 }
+    });
+
+    // Gerar e baixar arquivo Excel
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const dataHoraAgora = new Date().toISOString().replace(/[:.]/g,'-');
+    a.download = `${usuarioLogado.username}_${dataHoraAgora}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    showMessage('Check list salvo com sucesso!', 'success');
+
+    setTimeout(() => {
+      window.location.href = 'index.html';
+    }, 2000);
+  });
+
+  logoutBtn.addEventListener('click', () => {
+    localStorage.removeItem('usuarioLogado');
+    window.location.href = 'index.html';
+  });
+</script>
+
+</body>
+</html>

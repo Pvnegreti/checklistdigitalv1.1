@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FALBOM NUTRIÇÃO ANIMAL - Login / Registro</title>
+<style>
+  :root {
+    --laranja: #f57c00;
+    --laranja-escuro: #ef6c00;
+    --amarelo: #ffca28;
+    --texto-escuro: #333;
+    --fundo-claro: #fff8e1;
+  }
+  body {
+    font-family: Arial, sans-serif;
+    background-color: var(--fundo-claro);
+    margin: 0; padding: 0;
+    display: flex; justify-content: center; align-items: center; height: 100vh;
+  }
+  .container {
+    background-color: #fff3e0;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    padding: 20px 30px;
+    width: 360px;
+  }
+  h2 {
+    color: var(--laranja);
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: var(--texto-escuro);
+  }
+  input, select, button {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 16px;
+    border: 1px solid var(--laranja);
+    border-radius: 4px;
+    font-size: 1em;
+    box-sizing: border-box;
+  }
+  button {
+    background-color: var(--laranja);
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  button:hover {
+    background-color: var(--laranja-escuro);
+  }
+  .message {
+    margin-bottom: 15px;
+    padding: 10px;
+    border-radius: 4px;
+    font-weight: 600;
+    display: none;
+  }
+  .message.error {
+    background-color: #ffcdd2;
+    color: #b71c1c;
+  }
+  .message.success {
+    background-color: #c8e6c9;
+    color: #1b5e20;
+  }
+  .toggle-link {
+    text-align: center;
+    margin-top: 10px;
+  }
+  .toggle-link a {
+    color: var(--laranja);
+    text-decoration: none;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .toggle-link a:hover {
+    text-decoration: underline;
+  }
+  form {
+    display: none;
+  }
+  form.active {
+    display: block;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h2 id="formTitle">Login</h2>
+
+    <!-- Formulário Login -->
+    <form id="loginForm" class="active" autocomplete="off">
+      <div id="loginMessage" class="message"></div>
+
+      <label for="loginUsername">Usuário</label>
+      <input type="text" id="loginUsername" name="loginUsername" placeholder="Digite seu usuário" required />
+
+      <label for="loginPassword">Senha</label>
+      <input type="password" id="loginPassword" name="loginPassword" placeholder="Digite sua senha" required />
+
+      <button type="submit">Entrar</button>
+    </form>
+
+    <!-- Formulário Registro -->
+    <form id="registerForm" autocomplete="off">
+      <div id="registerMessage" class="message"></div>
+
+      <label for="creatorUsername">Usuário Criador</label>
+      <input type="text" id="creatorUsername" name="creatorUsername" placeholder="Seu usuário" required />
+
+      <label for="creatorPassword">Senha Criador</label>
+      <input type="password" id="creatorPassword" name="creatorPassword" placeholder="Sua senha" required />
+
+      <hr style="margin: 20px 0;" />
+
+      <label for="registerUsername">Novo Usuário</label>
+      <input type="text" id="registerUsername" name="registerUsername" placeholder="Nome do novo usuário" required />
+
+      <label for="registerPassword">Senha do Novo Usuário</label>
+      <input type="password" id="registerPassword" name="registerPassword" placeholder="Senha do novo usuário" required />
+
+      <label for="registerConfirmPassword">Confirmar Senha</label>
+      <input type="password" id="registerConfirmPassword" name="registerConfirmPassword" placeholder="Confirme a senha" required />
+
+      <label for="registerNivel">Nível do Novo Usuário</label>
+      <select id="registerNivel" name="registerNivel" required>
+        <option value="" disabled selected>Selecione o nível</option>
+        <option value="Administrador">Administrador</option>
+        <option value="Supervisor">Supervisor</option>
+        <option value="Operador">Operador</option>
+      </select>
+
+      <button type="submit">Registrar</button>
+    </form>
+
+    <div class="toggle-link">
+      <a href="#" id="showRegister">Registrar novo usuário</a>
+      <a href="#" id="showLogin" style="display:none;">Voltar ao login</a>
+    </div>
+  </div>
+
+<script>
+  const loginForm = document.getElementById('loginForm');
+  const registerForm = document.getElementById('registerForm');
+  const showRegisterLink = document.getElementById('showRegister');
+  const showLoginLink = document.getElementById('showLogin');
+  const formTitle = document.getElementById('formTitle');
+
+  showRegisterLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    loginForm.classList.remove('active');
+    registerForm.classList.add('active');
+    showRegisterLink.style.display = 'none';
+    showLoginLink.style.display = 'inline';
+    formTitle.textContent = 'Registrar Novo Usuário';
+    clearMessages();
+    clearInputs();
+  });
+
+  showLoginLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    registerForm.classList.remove('active');
+    loginForm.classList.add('active');
+    showLoginLink.style.display = 'none';
+    showRegisterLink.style.display = 'inline';
+    formTitle.textContent = 'Login';
+    clearMessages();
+    clearInputs();
+  });
+
+  function clearMessages() {
+    document.getElementById('loginMessage').style.display = 'none';
+    document.getElementById('registerMessage').style.display = 'none';
+  }
+
+  function clearInputs() {
+    loginForm.reset();
+    registerForm.reset();
+  }
+
+  // Login
+  loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = document.getElementById('loginUsername').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const messageDiv = document.getElementById('loginMessage');
+    const userDataRaw = localStorage.getItem('user_' + username);
+    if (!userDataRaw) {
+      showMessage(messageDiv, 'Usuário não encontrado.', 'error');
+      return;
+    }
+    const user = JSON.parse(userDataRaw);
+    if (user.password !== password) {
+      showMessage(messageDiv, 'Senha incorreta.', 'error');
+      return;
+    }
+    showMessage(messageDiv, `Bem-vindo, ${user.username}! Nível: ${user.nivel}`, 'success');
+    localStorage.setItem('usuarioLogado', JSON.stringify({ username: user.username, nivel: user.nivel }));
+    setTimeout(() => {
+      if (user.nivel === 'Administrador') {
+        window.location.href = 'admin.html';
+      } else if (user.nivel === 'Supervisor') {
+        window.location.href = 'supervisor.html';
+      } else if (user.nivel === 'Operador') {
+        window.location.href = 'operador.html';
+      } else {
+        alert('Nível de usuário desconhecido.');
+      }
+    }, 1500);
+  });
+
+  // Registro
+  registerForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+
+    const creatorUsername = document.getElementById('creatorUsername').value.trim();
+    const creatorPassword = document.getElementById('creatorPassword').value;
+    const newUsername = document.getElementById('registerUsername').value.trim();
+    const newPassword = document.getElementById('registerPassword').value;
+    const newConfirmPassword = document.getElementById('registerConfirmPassword').value;
+    const newLevel = document.getElementById('registerNivel').value;
+    const messageDiv = document.getElementById('registerMessage');
+
+    clearMessages();
+
+    if (newPassword !== newConfirmPassword) {
+      showMessage(messageDiv, 'As senhas não coincidem.', 'error');
+      return;
+    }
+    if (!creatorUsername || !creatorPassword || !newUsername || !newPassword || !newLevel) {
+      showMessage(messageDiv, 'Preencha todos os campos.', 'error');
+      return;
+    }
+
+    // Verifica criador
+    const creatorDataRaw = localStorage.getItem('user_' + creatorUsername);
+    if (!creatorDataRaw) {
+      showMessage(messageDiv, 'Usuário criador não encontrado.', 'error');
+      return;
+    }
+    const creatorData = JSON.parse(creatorDataRaw);
+    if (creatorData.password !== creatorPassword) {
+      showMessage(messageDiv, 'Senha do usuário criador incorreta.', 'error');
+      return;
+    }
+
+    // Permissões
+    if (creatorData.nivel === 'Operador') {
+      showMessage(messageDiv, 'Operador não pode criar usuários.', 'error');
+      return;
+    }
+    if (creatorData.nivel === 'Supervisor' && newLevel !== 'Operador') {
+      showMessage(messageDiv, 'Supervisor só pode criar usuários do nível Operador.', 'error');
+      return;
+    }
+    if (creatorData.nivel === 'Administrador' && !['Administrador', 'Supervisor', 'Operador'].includes(newLevel)) {
+      showMessage(messageDiv, 'Administrador só pode criar usuários dos níveis Administrador, Supervisor ou Operador.', 'error');
+      return;
+    }
+    if (newLevel === 'Administrador' && creatorData.nivel !== 'Administrador') {
+      showMessage(messageDiv, 'Apenas Administrador pode criar usuários Administradores.', 'error');
+      return;
+    }
+
+    // Verifica se usuário já existe
+    if (localStorage.getItem('user_' + newUsername)) {
+      showMessage(messageDiv, 'Usuário já existe. Escolha outro.', 'error');
+      return;
+    }
+
+    // Cria usuário
+    const newUser = {
+      username: newUsername,
+      password: newPassword,
+      nivel: newLevel
+    };
+    localStorage.setItem('user_' + newUsername, JSON.stringify(newUser));
+    showMessage(messageDiv, `Usuário ${newUsername} registrado com sucesso como ${newLevel}!`, 'success');
+
+    // Limpa campos do novo usuário
+    document.getElementById('registerUsername').value = '';
+    document.getElementById('registerPassword').value = '';
+    document.getElementById('registerConfirmPassword').value = '';
+    document.getElementById('registerNivel').value = '';
+  });
+
+  function showMessage(element, msg, type) {
+    element.textContent = msg;
+    element.className = 'message ' + type;
+    element.style.display = 'block';
+  }
+</script>
+</body>
+</html>
